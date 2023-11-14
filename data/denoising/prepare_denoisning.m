@@ -1,4 +1,7 @@
-I1 = double(dc);
+clear;
+load('C:\Users\Kikki\Archive\dataset\DC_mall\dc');
+
+I1 = double(image);
 y = 51;
 x = 601;
 I1 = I1(x:x+199,y:y+199,:);
