@@ -6,6 +6,7 @@ from torch.utils.tensorboard import SummaryWriter
 from denoising2D import print_images
 from models import *
 from utils.denoising_utils import *
+from utils.max_min_normalize import max_min_normalize
 from utils.psnr import psnr_gpu
 
 print('import success...')
@@ -35,6 +36,7 @@ exp_weight = 0.99
 show_every = 200
 save_every = 200
 num_iter = 2000       # number of network iterations
+
 # build the network
 net = skip(image.shape[0],
            image.shape[0],
@@ -115,7 +117,9 @@ def closure():
         out = torch.clamp(out, 0, 1)
         out_avg = torch.clamp(out_avg, 0, 1)
 
-        print_images(out.squeeze().detach(), out_avg.squeeze().detach())
+        out_normalize = max_min_normalize(out.squeeze().detach())
+        out_avg_normalize = max_min_normalize(out_avg.squeeze().detach())
+        print_images(out_normalize, out_avg_normalize)
 
         if psnr_noisy - psnr_noisy_last < -5:                           # model produced an overfit
             for new_param, net_param in zip(last_net, net.parameters()):
