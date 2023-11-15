@@ -1,10 +1,10 @@
 import time
 
 import scipy.io as sio
-from matplotlib import pyplot as plt
 from skimage.metrics import peak_signal_noise_ratio
 
 from models import *
+from utils.common_utils import *
 from utils.denoising_utils import *
 
 print('import success...')
@@ -15,15 +15,6 @@ data_type = torch.cuda.FloatTensor
 
 sigma = 100
 sigma_ = sigma / 255.
-
-
-def print_images(image_var, decrease_image_var):
-    f, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, sharey=True, figsize=(15, 8))
-    ax1.imshow(torch.stack((image_var[56, :, :], image_var[26, :, :], image_var[16, :, :]), 2).cpu())
-    ax2.imshow(torch.stack((decrease_image_var[56, :, :], decrease_image_var[26, :, :], decrease_image_var[16, :, :]),
-                           2).cpu())
-    plt.show()
-
 
 # ensure dimensions [0][1] are divisible by 32 (or 2^depth)!
 file_name = 'data/denoising/denoising.mat'

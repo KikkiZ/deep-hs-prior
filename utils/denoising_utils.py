@@ -1,11 +1,6 @@
-import os
-
 import numpy as np
 
-from .common_utils import *
 
-
-        
 def get_noisy_image(img_np, sigma):
     """Adds Gaussian noise to an image.
     

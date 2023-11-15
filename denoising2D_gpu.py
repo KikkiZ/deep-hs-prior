@@ -3,8 +3,8 @@ import time
 import scipy.io as sio
 from torch.utils.tensorboard import SummaryWriter
 
-from denoising2D import print_images
 from models import *
+from utils.common_utils import *
 from utils.denoising_utils import *
 from utils.max_min_normalize import max_min_normalize
 from utils.psnr import psnr_gpu
