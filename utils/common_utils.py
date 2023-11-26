@@ -2,8 +2,11 @@ import torch
 from matplotlib import pyplot as plt
 
 
-def print_images(var_1, var_2):
+def print_images(var_1, var_2, title=None):
     f, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, sharey=True, figsize=(15, 8))
+    # 设置输出图片的标题
+    if title is not None:
+        f.suptitle(title)
     ax1.imshow(torch.stack((var_1[56, :, :], var_1[26, :, :], var_1[16, :, :]), 2).cpu())
     ax2.imshow(torch.stack((var_2[56, :, :], var_2[26, :, :], var_2[16, :, :]), 2).cpu())
     plt.show()
@@ -129,8 +132,8 @@ def optimize(optimizer_type, parameters, closure, learning_rate, num_iter):
         # iterative execution network
         for j in range(num_iter + 1):
             optimizer.zero_grad()  # clean gradient
-            closure()              # execution model, which includes backwards
-            optimizer.step()       # update the parameters of the model
+            closure()  # execution model, which includes backwards
+            optimizer.step()  # update the parameters of the model
     else:
         assert False
 

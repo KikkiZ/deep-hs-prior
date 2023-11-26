@@ -104,7 +104,15 @@ class UNet(nn.Module):
                                  bias=need_bias,
                                  pad=pad)
 
-        self.upsample = self._upsample(upsample_mode)
+        if upsample_mode == 'pixel_shuffle':
+            self.upsample = nn.Sequential(nn.PixelShuffle(2),
+                                          nn.LeakyReLU(0.2, inplace=False),
+                                          nn.Conv2d(64, 256,
+                                                    kernel_size=kernel_size_up,
+                                                    padding=kernel_size_up // 2,
+                                                    bias=False))
+        else:
+            self.upsample = self._upsample(upsample_mode)
 
         self.decoder_1 = self._decoder(input_channel=num_channels_up[1] + num_channels_skip,
                                        output_channel=num_channels_up[0],

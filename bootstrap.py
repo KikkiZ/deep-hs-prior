@@ -13,6 +13,10 @@ def parse_args():
     parser.add_argument('--show_every', dest='show_every', default=50, type=int)
     parser.add_argument('--exp_weight', dest='exp_weight', default=0.99, type=float)
     parser.add_argument('--lr', dest='learning_rate', default=0.01, type=float)
+    parser.add_argument('--skip_channel', dest='skip_channel', default=4, type=int)
+    parser.add_argument('--up_channel', dest='up_channel', default=128, type=int)
+    parser.add_argument('--down_channel', dest='down_channel', default=128, type=int)
+    parser.add_argument('--upsample_mode', dest='upsample_mode', default='bilinear', type=str)
 
     return parser.parse_args()
 

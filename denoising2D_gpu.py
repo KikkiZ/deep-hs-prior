@@ -30,7 +30,7 @@ def func(args):
     decrease_image = torch.from_numpy(decrease_image).type(data_type)
     # copy_image = image.clone().detach()
     # copy_decrease_image = decrease_image.clone().detach()
-    print_images(image, decrease_image)
+    print_images(image, decrease_image, 'origin image')
 
     reg_noise_std = args.reg_noise_std
     learning_rate = args.learning_rate
@@ -41,13 +41,13 @@ def func(args):
     # build the network
     net = UNet(image.shape[0],
                image.shape[0],
-               num_channels_up=[128] * 5,
-               num_channels_down=[128] * 5,
-               num_channels_skip=4,
+               num_channels_up=[args.up_channel] * 5,
+               num_channels_down=[args.down_channel] * 5,
+               num_channels_skip=args.skip_channel,
                kernel_size_up=3,
                kernel_size_down=3,
                kernel_size_skip=3,
-               upsample_mode='bilinear',  # downsample_mode='avg',
+               upsample_mode=args.upsample_mode,  # downsample_mode='avg',
                need1x1_up=False,
                need_sigmoid=False,
                need_bias=True,
@@ -91,7 +91,7 @@ def func(args):
             out_avg = out_avg * exp_weight + out.detach() * (1 - exp_weight)
 
         total_loss = loss_func(out, decrease_image).to(device)  # calculate the loss value of the loss function
-        total_loss.backward()                        # back propagation gradient calculation
+        total_loss.backward()                                   # back propagation gradient calculation
 
         # print(decrease_image.shape, out.squeeze().shape)
         psnr_noisy = psnr_gpu(decrease_image.squeeze(), out.squeeze())
@@ -104,13 +104,14 @@ def func(args):
 
         # backtracking
         if i % show_every == 0:
-            print('迭代次数: [', i, '/', num_iter, ']')
+            msg = 'iteration times: [' + str(i) + '/' + str(num_iter) + ']'
+            print(msg)
             out = torch.clamp(out, 0, 1)
             out_avg = torch.clamp(out_avg, 0, 1)
 
             out_normalize = max_min_normalize(out.squeeze().detach())
             out_avg_normalize = max_min_normalize(out_avg.squeeze().detach())
-            print_images(out_normalize, out_avg_normalize)
+            print_images(out_normalize, out_avg_normalize, msg)
         #
         #     if psnr_noisy - psnr_noisy_last < -5:  # model produced an overfit
         #         for new_param, net_param in zip(last_net, net.parameters()):
@@ -135,4 +136,4 @@ def func(args):
     writer.close()
     end_time = time.time()
     print('cost time', end_time - start_time, 's')
-    print_images(image, decrease_image.squeeze())
+    print_images(image, decrease_image.squeeze(), 'origin image')
