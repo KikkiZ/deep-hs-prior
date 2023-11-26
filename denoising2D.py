@@ -4,7 +4,7 @@ import datetime
 import scipy.io as sio
 from torch.utils.tensorboard import SummaryWriter
 
-from models.unet import UNet
+from models.unet2D import UNet
 from utils.common_utils import *
 from utils.denoising_utils import *
 
@@ -43,7 +43,7 @@ def func(args):
                image.shape[0],
                num_channels_up=[args.up_channel] * 5,
                num_channels_down=[args.down_channel] * 5,
-               num_channels_skip=args.skip_channel,
+               num_channel_skip=args.skip_channel,
                kernel_size_up=3,
                kernel_size_down=3,
                kernel_size_skip=3,
