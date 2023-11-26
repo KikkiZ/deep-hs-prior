@@ -2,11 +2,10 @@ import torch
 from matplotlib import pyplot as plt
 
 
-def print_images(image_var, decrease_image_var):
+def print_images(var_1, var_2):
     f, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, sharey=True, figsize=(15, 8))
-    ax1.imshow(torch.stack((image_var[56, :, :], image_var[26, :, :], image_var[16, :, :]), 2).cpu())
-    ax2.imshow(torch.stack((decrease_image_var[56, :, :], decrease_image_var[26, :, :], decrease_image_var[16, :, :]),
-                           2).cpu())
+    ax1.imshow(torch.stack((var_1[56, :, :], var_1[26, :, :], var_1[16, :, :]), 2).cpu())
+    ax2.imshow(torch.stack((var_2[56, :, :], var_2[26, :, :], var_2[16, :, :]), 2).cpu())
     plt.show()
 
 
@@ -134,3 +133,50 @@ def optimize(optimizer_type, parameters, closure, learning_rate, num_iter):
             optimizer.step()       # update the parameters of the model
     else:
         assert False
+
+
+def _tensor_repeat(inputs, x, y):
+    inputs = inputs.repeat(x, y, 1)
+    inputs = torch.transpose(inputs, 0, 2)
+    inputs = torch.transpose(inputs, 1, 2)
+    return inputs
+
+
+def max_min_normalize(inputs: torch.Tensor):
+    max_tensor = torch.max(inputs, dim=1).values
+    max_tensor = torch.max(max_tensor, dim=1).values
+    max_tensor = _tensor_repeat(max_tensor, x=inputs.shape[1], y=inputs.shape[2])
+
+    min_tensor = torch.min(inputs, dim=1).values
+    min_tensor = torch.min(min_tensor, dim=1).values
+    min_tensor = _tensor_repeat(min_tensor, x=inputs.shape[1], y=inputs.shape[2])
+
+    return (inputs - min_tensor) / (max_tensor - min_tensor)
+
+
+def _mean_squared_error(image0, image1):
+    return torch.mean((image0 - image1) ** 2)
+
+
+def psnr_gpu(image_true: torch.Tensor, image_test: torch.Tensor):
+    if not image_true.shape == image_test.shape:
+        print(image_true.shape)
+        print(image_test.shape)
+        raise ValueError('Input must have the same dimensions.')
+
+    if image_true.dtype != image_test.dtype:
+        raise TypeError("Inputs have mismatched dtype. Set both tensors to be of the same type.")
+
+    true_max = torch.max(image_true)
+    true_min = torch.min(image_true)
+    if true_max > 1 or true_min < -1:
+        raise ValueError("image_true has intensity values outside the range expected "
+                         "for its data type. Please manually specify the data_range.")
+    if true_min >= 0:
+        # most common case (255 for uint8, 1 for float)
+        data_range = 1
+    else:
+        data_range = 2
+
+    err = _mean_squared_error(image_true, image_test)
+    return (10 * torch.log10((data_range ** 2) / err)).item()

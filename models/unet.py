@@ -1,192 +1,266 @@
-import torch.nn as nn
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from .common import * 
+from torch import nn
 
-class ListModule(nn.Module):
-    def __init__(self, *args):
-        super(ListModule, self).__init__()
-        idx = 0
-        for module in args:
-            self.add_module(str(idx), module)
-            idx += 1
+from models.common import conv, bn, act
 
-    def __getitem__(self, idx):
-        if idx >= len(self._modules):
-            raise IndexError('index {} is out of range'.format(idx))
-        if idx < 0: 
-            idx = len(self) + idx
-
-        it = iter(self._modules.values())
-        for i in range(idx):
-            next(it)
-        return next(it)
-
-    def __iter__(self):
-        return iter(self._modules.values())
-
-    def __len__(self):
-        return len(self._modules)
 
 class UNet(nn.Module):
-    '''
-        upsample_mode in ['deconv', 'nearest', 'bilinear']
-        pad in ['zero', 'replication', 'none']
-    '''
-    def __init__(self, num_input_channels=3, num_output_channels=3, 
-                       feature_scale=4, more_layers=0, concat_x=False,
-                       upsample_mode='deconv', pad='zero', norm_layer=nn.InstanceNorm2d, need_sigmoid=True, need_bias=True):
+    def __init__(self,
+                 input_channel=3,
+                 output_channel=3,
+                 num_channels_down=None,
+                 num_channels_up=None,
+                 num_channels_skip=4,
+                 kernel_size_down=3,
+                 kernel_size_up=3,
+                 kernel_size_skip=3,
+                 need_sigmoid=True,
+                 downsample_mode='stride',
+                 activate='LeakyReLU',
+                 need_bias=True,
+                 need1x1_up=True,
+                 pad='zero',
+                 upsample_mode='nearest'):
+
         super(UNet, self).__init__()
 
-        self.feature_scale = feature_scale
-        self.more_layers = more_layers
-        self.concat_x = concat_x
+        if num_channels_up is None:
+            num_channels_up = [16, 32, 64, 128, 128]
+        if num_channels_down is None:
+            num_channels_down = [16, 32, 64, 128, 128]
 
+        self.encoder_1 = self._encoder(input_channel=input_channel,
+                                       output_channel=num_channels_down[0],
+                                       downsample_mode=downsample_mode,
+                                       kernel_size=kernel_size_down,
+                                       activate=activate,
+                                       bias=need_bias,
+                                       pad=pad)
 
-        filters = [64, 128, 256, 512, 1024]
-        filters = [x // self.feature_scale for x in filters]
+        self.encoder_2 = self._encoder(input_channel=num_channels_down[0],
+                                       output_channel=num_channels_down[1],
+                                       downsample_mode=downsample_mode,
+                                       kernel_size=kernel_size_down,
+                                       activate=activate,
+                                       bias=need_bias,
+                                       pad=pad)
 
-        self.start = unetConv2(num_input_channels, filters[0] if not concat_x else filters[0] - num_input_channels, norm_layer, need_bias, pad)
+        self.encoder_3 = self._encoder(input_channel=num_channels_down[1],
+                                       output_channel=num_channels_down[2],
+                                       downsample_mode=downsample_mode,
+                                       kernel_size=kernel_size_down,
+                                       activate=activate,
+                                       bias=need_bias,
+                                       pad=pad)
 
-        self.down1 = unetDown(filters[0], filters[1] if not concat_x else filters[1] - num_input_channels, norm_layer, need_bias, pad)
-        self.down2 = unetDown(filters[1], filters[2] if not concat_x else filters[2] - num_input_channels, norm_layer, need_bias, pad)
-        self.down3 = unetDown(filters[2], filters[3] if not concat_x else filters[3] - num_input_channels, norm_layer, need_bias, pad)
-        self.down4 = unetDown(filters[3], filters[4] if not concat_x else filters[4] - num_input_channels, norm_layer, need_bias, pad)
+        self.encoder_4 = self._encoder(input_channel=num_channels_down[2],
+                                       output_channel=num_channels_down[3],
+                                       downsample_mode=downsample_mode,
+                                       kernel_size=kernel_size_down,
+                                       activate=activate,
+                                       bias=need_bias,
+                                       pad=pad)
 
-        # more downsampling layers
-        if self.more_layers > 0:
-            self.more_downs = [
-                unetDown(filters[4], filters[4] if not concat_x else filters[4] - num_input_channels , norm_layer, need_bias, pad) for i in range(self.more_layers)]
-            self.more_ups = [unetUp(filters[4], upsample_mode, need_bias, pad, same_num_filt =True) for i in range(self.more_layers)]
+        self.encoder_5 = self._encoder(input_channel=num_channels_down[3],
+                                       output_channel=num_channels_down[4],
+                                       downsample_mode=downsample_mode,
+                                       kernel_size=kernel_size_down,
+                                       activate=activate,
+                                       bias=need_bias,
+                                       pad=pad)
 
-            self.more_downs = ListModule(*self.more_downs)
-            self.more_ups   = ListModule(*self.more_ups)
+        self.skip_1 = self._skip(input_channel=num_channels_down[0],
+                                 output_channel=num_channels_skip,
+                                 kernel_size=kernel_size_skip,
+                                 activate=activate,
+                                 bias=need_bias,
+                                 pad=pad)
 
-        self.up4 = unetUp(filters[3], upsample_mode, need_bias, pad)
-        self.up3 = unetUp(filters[2], upsample_mode, need_bias, pad)
-        self.up2 = unetUp(filters[1], upsample_mode, need_bias, pad)
-        self.up1 = unetUp(filters[0], upsample_mode, need_bias, pad)
+        self.skip_2 = self._skip(input_channel=num_channels_down[1],
+                                 output_channel=num_channels_skip,
+                                 kernel_size=kernel_size_skip,
+                                 activate=activate,
+                                 bias=need_bias,
+                                 pad=pad)
 
-        self.final = conv(filters[0], num_output_channels, 1, bias=need_bias, pad=pad)
+        self.skip_3 = self._skip(input_channel=num_channels_down[2],
+                                 output_channel=num_channels_skip,
+                                 kernel_size=kernel_size_skip,
+                                 activate=activate,
+                                 bias=need_bias,
+                                 pad=pad)
 
-        if need_sigmoid: 
-            self.final = nn.Sequential(self.final, nn.Sigmoid())
+        self.skip_4 = self._skip(input_channel=num_channels_down[3],
+                                 output_channel=num_channels_skip,
+                                 kernel_size=kernel_size_skip,
+                                 activate=activate,
+                                 bias=need_bias,
+                                 pad=pad)
 
-    def forward(self, inputs):
+        self.skip_5 = self._skip(input_channel=num_channels_down[4],
+                                 output_channel=num_channels_skip,
+                                 kernel_size=kernel_size_skip,
+                                 activate=activate,
+                                 bias=need_bias,
+                                 pad=pad)
 
-        # Downsample 
-        downs = [inputs]
-        down = nn.AvgPool2d(2, 2)
-        for i in range(4 + self.more_layers):
-            downs.append(down(downs[-1]))
+        self.upsample = self._upsample(upsample_mode)
 
-        in64 = self.start(inputs)
-        if self.concat_x:
-            in64 = torch.cat([in64, downs[0]], 1)
+        self.decoder_1 = self._decoder(input_channel=num_channels_up[1] + num_channels_skip,
+                                       output_channel=num_channels_up[0],
+                                       kernel_size=kernel_size_up,
+                                       need1x1_up=need1x1_up,
+                                       activate=activate,
+                                       bias=need_bias,
+                                       pad=pad)
 
-        down1 = self.down1(in64)
-        if self.concat_x:
-            down1 = torch.cat([down1, downs[1]], 1)
+        self.decoder_2 = self._decoder(input_channel=num_channels_up[2] + num_channels_skip,
+                                       output_channel=num_channels_up[1],
+                                       kernel_size=kernel_size_up,
+                                       need1x1_up=need1x1_up,
+                                       activate=activate,
+                                       bias=need_bias,
+                                       pad=pad)
 
-        down2 = self.down2(down1)
-        if self.concat_x:
-            down2 = torch.cat([down2, downs[2]], 1)
+        self.decoder_3 = self._decoder(input_channel=num_channels_up[3] + num_channels_skip,
+                                       output_channel=num_channels_up[2],
+                                       kernel_size=kernel_size_up,
+                                       need1x1_up=need1x1_up,
+                                       activate=activate,
+                                       bias=need_bias,
+                                       pad=pad)
 
-        down3 = self.down3(down2)
-        if self.concat_x:
-            down3 = torch.cat([down3, downs[3]], 1)
+        self.decoder_4 = self._decoder(input_channel=num_channels_up[4] + num_channels_skip,
+                                       output_channel=num_channels_up[3],
+                                       kernel_size=kernel_size_up,
+                                       need1x1_up=need1x1_up,
+                                       activate=activate,
+                                       bias=need_bias,
+                                       pad=pad)
 
-        down4 = self.down4(down3)
-        if self.concat_x:
-            down4 = torch.cat([down4, downs[4]], 1)
+        self.decoder_5 = self._decoder(input_channel=num_channels_down[4] + num_channels_skip,
+                                       output_channel=num_channels_up[4],
+                                       kernel_size=kernel_size_up,
+                                       need1x1_up=need1x1_up,
+                                       activate=activate,
+                                       bias=need_bias,
+                                       pad=pad)
 
-        if self.more_layers > 0:
-            prevs = [down4]
-            for kk, d in enumerate(self.more_downs):
-                # print(prevs[-1].size())
-                out = d(prevs[-1])
-                if self.concat_x:
-                    out = torch.cat([out,  downs[kk + 5]], 1)
+        self.output = self._output(input_channel=num_channels_up[0],
+                                   output_channel=output_channel,
+                                   need_sigmoid=need_sigmoid,
+                                   bias=need_bias,
+                                   pad=pad)
 
-                prevs.append(out)
+    def _encoder(self, input_channel, output_channel, kernel_size, bias, pad, activate, downsample_mode):
+        encoder = nn.Sequential()
 
-            up_ = self.more_ups[-1](prevs[-1], prevs[-2])
-            for idx in range(self.more_layers - 1):
-                l = self.more_ups[self.more - idx - 2]
-                up_= l(up_, prevs[self.more - idx - 2])
-        else:
-            up_= down4
+        encoder.add_module('0:downsample', conv(input_channel=input_channel,
+                                                output_channel=output_channel,
+                                                downsample_mode=downsample_mode,
+                                                kernel_size=kernel_size,
+                                                stride=2,
+                                                bias=bias,
+                                                pad=pad))
+        encoder.add_module('1:bn', bn(output_channel))
+        encoder.add_module('2:act', act(activate=activate))
+        encoder.add_module('3:conv', conv(input_channel=output_channel,
+                                          output_channel=output_channel,
+                                          kernel_size=kernel_size,
+                                          bias=bias,
+                                          pad=pad))
+        encoder.add_module('4:bn', bn(output_channel))
+        encoder.add_module('5:act', act(activate=activate))
 
-        up4= self.up4(up_, down3)
-        up3= self.up3(up4, down2)
-        up2= self.up2(up3, down1)
-        up1= self.up1(up2, in64)
+        return encoder
 
-        return self.final(up1)
+    def _decoder(self, input_channel, output_channel, kernel_size, bias, pad, activate, need1x1_up):
+        decoder = nn.Sequential()
 
+        decoder.add_module('0:bn', bn(num_features=input_channel))
+        decoder.add_module('1:conv', conv(input_channel=input_channel,
+                                          output_channel=output_channel,
+                                          kernel_size=kernel_size,
+                                          bias=bias,
+                                          pad=pad))
+        decoder.add_module('2:bn', bn(num_features=output_channel))
+        decoder.add_module('3:act', act(activate=activate))
+        decoder.add_module('4:conv', conv(input_channel=output_channel,
+                                          output_channel=output_channel,
+                                          kernel_size=kernel_size,
+                                          bias=bias,
+                                          pad=pad))
+        decoder.add_module('5:bn', bn(num_features=output_channel))
+        decoder.add_module('6:act', act(activate=activate))
 
+        if need1x1_up:
+            decoder.add_module('7:conv', conv(input_channel=output_channel,
+                                              output_channel=output_channel,
+                                              kernel_size=1,
+                                              bias=bias,
+                                              pad=pad))
+            decoder.add_module('8:bn', bn(num_features=output_channel))
+            decoder.add_module('9:act', act(activate=activate))
 
-class unetConv2(nn.Module):
-    def __init__(self, in_size, out_size, norm_layer, need_bias, pad):
-        super(unetConv2, self).__init__()
+        return decoder
 
-        print(pad)
-        if norm_layer is not None:
-            self.conv1= nn.Sequential(conv(in_size, out_size, 3, bias=need_bias, pad=pad),
-                                       norm_layer(out_size),
-                                       nn.ReLU(),)
-            self.conv2= nn.Sequential(conv(out_size, out_size, 3, bias=need_bias, pad=pad),
-                                       norm_layer(out_size),
-                                       nn.ReLU(),)
-        else:
-            self.conv1= nn.Sequential(conv(in_size, out_size, 3, bias=need_bias, pad=pad),
-                                       nn.ReLU(),)
-            self.conv2= nn.Sequential(conv(out_size, out_size, 3, bias=need_bias, pad=pad),
-                                       nn.ReLU(),)
-    def forward(self, inputs):
-        outputs= self.conv1(inputs)
-        outputs= self.conv2(outputs)
-        return outputs
+    def _upsample(self, upsample_mode):
+        return nn.Upsample(scale_factor=2, mode=upsample_mode)
 
+    def _skip(self, input_channel, output_channel, kernel_size, bias, pad, activate):
+        skip_connect = nn.Sequential()
 
-class unetDown(nn.Module):
-    def __init__(self, in_size, out_size, norm_layer, need_bias, pad):
-        super(unetDown, self).__init__()
-        self.conv= unetConv2(in_size, out_size, norm_layer, need_bias, pad)
-        self.down= nn.MaxPool2d(2, 2)
+        skip_connect.add_module('0:conv', conv(input_channel=input_channel,
+                                               output_channel=output_channel,
+                                               kernel_size=kernel_size,
+                                               bias=bias,
+                                               pad=pad))
+        skip_connect.add_module('1:bn', bn(num_features=output_channel))
+        skip_connect.add_module('2:act', act(activate=activate))
 
-    def forward(self, inputs):
-        outputs= self.down(inputs)
-        outputs= self.conv(outputs)
-        return outputs
+        return skip_connect
 
+    def _output(self, input_channel, output_channel, bias, pad, need_sigmoid):
+        layer = nn.Sequential()
 
-class unetUp(nn.Module):
-    def __init__(self, out_size, upsample_mode, need_bias, pad, same_num_filt=False):
-        super(unetUp, self).__init__()
+        layer.add_module('0:conv', conv(input_channel=input_channel,
+                                        output_channel=output_channel,
+                                        kernel_size=1,
+                                        bias=bias,
+                                        pad=pad))
 
-        num_filt = out_size if same_num_filt else out_size * 2
-        if upsample_mode == 'deconv':
-            self.up= nn.ConvTranspose2d(num_filt, out_size, 4, stride=2, padding=1)
-            self.conv= unetConv2(out_size * 2, out_size, None, need_bias, pad)
-        elif upsample_mode=='bilinear' or upsample_mode=='nearest':
-            self.up = nn.Sequential(nn.Upsample(scale_factor=2, mode=upsample_mode),
-                                   conv(num_filt, out_size, 3, bias=need_bias, pad=pad))
-            self.conv= unetConv2(out_size * 2, out_size, None, need_bias, pad)
-        else:
-            assert False
+        if need_sigmoid:
+            layer.add_module('1:act', nn.Sigmoid())
 
-    def forward(self, inputs1, inputs2):
-        in1_up= self.up(inputs1)
-        
-        if (inputs2.size(2) != in1_up.size(2)) or (inputs2.size(3) != in1_up.size(3)):
-            diff2 = (inputs2.size(2) - in1_up.size(2)) // 2 
-            diff3 = (inputs2.size(3) - in1_up.size(3)) // 2 
-            inputs2_ = inputs2[:, :, diff2 : diff2 + in1_up.size(2), diff3 : diff3 + in1_up.size(3)]
-        else:
-            inputs2_ = inputs2
+        return layer
 
-        output= self.conv(torch.cat([in1_up, inputs2_], 1))
+    def forward(self, data):
 
-        return output
+        enc_1 = self.encoder_1(data)
+        enc_2 = self.encoder_2(enc_1)
+        enc_3 = self.encoder_3(enc_2)
+        enc_4 = self.encoder_4(enc_3)
+        enc_5 = self.encoder_5(enc_4)
+
+        dec_5 = enc_5
+        dec_5 = torch.cat([dec_5, self.skip_5(enc_5)], dim=1)
+        up_5 = self.upsample(dec_5)
+
+        dec_4 = self.decoder_5(up_5)
+        dec_4 = torch.cat([dec_4, self.skip_4(enc_4)], dim=1)
+        up_4 = self.upsample(dec_4)
+
+        dec_3 = self.decoder_4(up_4)
+        dec_3 = torch.cat([dec_3, self.skip_3(enc_3)], dim=1)
+        up_3 = self.upsample(dec_3)
+
+        dec_2 = self.decoder_3(up_3)
+        dec_2 = torch.cat([dec_2, self.skip_2(enc_2)], dim=1)
+        up_2 = self.upsample(dec_2)
+
+        dec_1 = self.decoder_2(up_2)
+        dec_1 = torch.cat([dec_1, self.skip_1(enc_1)], dim=1)
+        up_1 = self.upsample(dec_1)
+
+        out = self.decoder_1(up_1)
+        return self.output(out)

@@ -17,7 +17,7 @@ sigma = 100
 sigma_ = sigma / 255.
 
 # ensure dimensions [0][1] are divisible by 32 (or 2^depth)!
-file_name = 'data/denoising/denoising.mat'
+file_name = 'data/denoising.mat'
 mat = sio.loadmat(file_name)
 image = mat['image']
 decrease_image = mat['image_noisy']

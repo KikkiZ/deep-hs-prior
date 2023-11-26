@@ -3,7 +3,7 @@ from typing import Dict
 import torch
 import torch.nn as nn
 import numpy as np
-from .downsampler import Downsampler
+from models.downsampler import Downsampler
 
 
 def add_module(self, module):
@@ -19,20 +19,27 @@ class Concat(nn.Module):
         self.dim = dim
 
         for key, value in modules.items():
-            # print(type(module))
             self.add_module(key, value)
 
     def forward(self, input_data):
         inputs = []
         # _modules.values(): contains all operations in the current layer (layer)
+        temp = input_data
         for module in self._modules.values():
-            inputs.append(module(input_data))
+            temp = module(temp)
+            print(temp.shape)
+            inputs.append(temp)
+        print(len(inputs))
+        print(inputs[0].shape)
+        print(inputs[1].shape)
 
         inputs_shapes_2 = [x.shape[2] for x in inputs]
         inputs_shapes_3 = [x.shape[3] for x in inputs]
+        print(inputs_shapes_2)
+        print(inputs_shapes_3)
 
-        if np.all(np.array(inputs_shapes_2) == min(inputs_shapes_2)) and np.all(
-                np.array(inputs_shapes_3) == min(inputs_shapes_3)):
+        if (np.all(np.array(inputs_shapes_2) == min(inputs_shapes_2)) and
+                np.all(np.array(inputs_shapes_3) == min(inputs_shapes_3))):
             inputs_ = inputs
         else:
             target_shape2 = min(inputs_shapes_2)
@@ -78,23 +85,23 @@ class Swish(nn.Module):
         return x * self.s(x)
 
 
-def act(act_fun='LeakyReLU'):
+def act(activate='LeakyReLU'):
     """
         Either string defining an activation function or module (e.g. nn.ReLU)
     """
-    if isinstance(act_fun, str):
-        if act_fun == 'LeakyReLU':
+    if isinstance(activate, str):
+        if activate == 'LeakyReLU':
             return nn.LeakyReLU(0.2, inplace=True)
-        elif act_fun == 'Swish':
+        elif activate == 'Swish':
             return Swish()
-        elif act_fun == 'ELU':
+        elif activate == 'ELU':
             return nn.ELU()
-        elif act_fun == 'none':
+        elif activate == 'none':
             return nn.Sequential()
         else:
             assert False
     else:
-        return act_fun
+        return activate
 
 
 def bn(num_features):
@@ -106,7 +113,7 @@ def bn(num_features):
     return nn.BatchNorm2d(num_features)
 
 
-def conv(in_f, out_f, kernel_size, stride=1, bias=True, pad='zero', downsample_mode='stride'):
+def conv(input_channel, output_channel, kernel_size, stride=1, bias=True, pad='zero', downsample_mode='stride'):
     """Convolution layer
     Returns a convolution layer containing downsampling and reflection padding.
 
@@ -124,7 +131,7 @@ def conv(in_f, out_f, kernel_size, stride=1, bias=True, pad='zero', downsample_m
         elif downsample_mode == 'max':
             downsampler = nn.MaxPool2d(stride, stride)
         elif downsample_mode in ['lanczos2', 'lanczos3']:
-            downsampler = Downsampler(n_planes=out_f, factor=stride, kernel_type=downsample_mode, phase=0.5,
+            downsampler = Downsampler(n_planes=output_channel, factor=stride, kernel_type=downsample_mode, phase=0.5,
                                       preserve_size=True)
         else:
             assert False
@@ -137,7 +144,7 @@ def conv(in_f, out_f, kernel_size, stride=1, bias=True, pad='zero', downsample_m
         padding = nn.ReflectionPad2d(to_pad)
         to_pad = 0
 
-    convolver = nn.Conv2d(in_f, out_f, kernel_size, stride, padding=to_pad, bias=bias)
+    convolver = nn.Conv2d(input_channel, output_channel, kernel_size, stride, padding=to_pad, bias=bias)
 
     layers = filter(lambda x: x is not None, [padding, convolver, downsampler])
     return nn.Sequential(*layers)
