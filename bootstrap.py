@@ -1,6 +1,6 @@
 import argparse
 
-import denoising2D_gpu
+import denoising2D
 
 
 def parse_args():
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     args = parse_args()
 
     if args.net == '2d':
-        denoising2D_gpu.func(args)
+        denoising2D.func(args)
         exit()
     elif args.net == '3d':
         exit()
