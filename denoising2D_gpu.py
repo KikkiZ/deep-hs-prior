@@ -1,4 +1,5 @@
 import time
+import datetime
 
 import scipy.io as sio
 from torch.utils.tensorboard import SummaryWriter
@@ -27,16 +28,15 @@ def func(args):
 
     image = torch.from_numpy(image).type(data_type)
     decrease_image = torch.from_numpy(decrease_image).type(data_type)
-    copy_image = image.clone().detach()
-    copy_decrease_image = decrease_image.clone().detach()
-    print(copy_image.shape, copy_decrease_image.shape)
-    # print_images(image, decrease_image)
+    # copy_image = image.clone().detach()
+    # copy_decrease_image = decrease_image.clone().detach()
+    print_images(image, decrease_image)
 
-    reg_noise_std = 0.03  # 0 0.01 0.05 0.08
-    learning_rate = 0.01
-    exp_weight = 0.99
-    show_every = 200
-    num_iter = 2600  # number of network iterations
+    reg_noise_std = args.reg_noise_std
+    learning_rate = args.learning_rate
+    exp_weight = args.exp_weight
+    show_every = args.show_every
+    num_iter = args.num_iter  # number of network iterations
 
     # build the network
     net = UNet(image.shape[0],
@@ -73,7 +73,8 @@ def func(args):
     net_input_saved = net_input.detach().clone()  # clone the noise tensor without grad
     noise = net_input.detach().clone()  # clone twice
 
-    writer = SummaryWriter('./logs/denoising')  # the location where the data record is saved
+    date = datetime.datetime.now().strftime('%Y-%m-%d.%H-%M-%S')
+    writer = SummaryWriter('./logs/denoising/' + date)  # the location where the data record is saved
 
     def closure():
         # declare the following variables as global variables
@@ -89,25 +90,27 @@ def func(args):
         else:
             out_avg = out_avg * exp_weight + out.detach() * (1 - exp_weight)
 
-        total_loss = loss_func(out, decrease_image)  # calculate the loss value of the loss function
+        total_loss = loss_func(out, decrease_image).to(device)  # calculate the loss value of the loss function
         total_loss.backward()                        # back propagation gradient calculation
 
-        psnr_noisy = psnr_gpu(copy_decrease_image, out.squeeze())
-        psnr_gt = psnr_gpu(copy_image, out.squeeze())
-        psnr_gt_sm = psnr_gpu(copy_image, out_avg.squeeze())
+        # print(decrease_image.shape, out.squeeze().shape)
+        psnr_noisy = psnr_gpu(decrease_image.squeeze(), out.squeeze())
+        psnr_gt = psnr_gpu(image, out.squeeze())
+        psnr_gt_sm = psnr_gpu(image, out_avg.squeeze())
 
         writer.add_scalar('compare with de', psnr_noisy, i)
         writer.add_scalar('compare with gt', psnr_gt, i)
         writer.add_scalar('compare with gt_sm', psnr_gt_sm, i)
 
         # backtracking
-        # if i % show_every == 0:
-        #     out = torch.clamp(out, 0, 1)
-        #     out_avg = torch.clamp(out_avg, 0, 1)
-        #
-        #     out_normalize = max_min_normalize(out.squeeze().detach())
-        #     out_avg_normalize = max_min_normalize(out_avg.squeeze().detach())
-        #     print_images(out_normalize, out_avg_normalize)
+        if i % show_every == 0:
+            print('迭代次数: [', i, '/', num_iter, ']')
+            out = torch.clamp(out, 0, 1)
+            out_avg = torch.clamp(out_avg, 0, 1)
+
+            out_normalize = max_min_normalize(out.squeeze().detach())
+            out_avg_normalize = max_min_normalize(out_avg.squeeze().detach())
+            print_images(out_normalize, out_avg_normalize)
         #
         #     if psnr_noisy - psnr_noisy_last < -5:  # model produced an overfit
         #         for new_param, net_param in zip(last_net, net.parameters()):
@@ -132,3 +135,4 @@ def func(args):
     writer.close()
     end_time = time.time()
     print('cost time', end_time - start_time, 's')
+    print_images(image, decrease_image.squeeze())

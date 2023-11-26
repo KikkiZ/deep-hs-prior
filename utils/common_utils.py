@@ -123,11 +123,11 @@ def optimize(optimizer_type, parameters, closure, learning_rate, num_iter):
                                       tolerance_change=-1)
         optimizer.step(closure2)
     elif optimizer_type == 'adam':
-        print('starting optimization with ADAM')
+        # print('starting optimization with ADAM')
         optimizer = torch.optim.Adam(parameters, lr=learning_rate)
 
         # iterative execution network
-        for j in range(num_iter):
+        for j in range(num_iter + 1):
             optimizer.zero_grad()  # clean gradient
             closure()              # execution model, which includes backwards
             optimizer.step()       # update the parameters of the model
