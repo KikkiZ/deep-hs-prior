@@ -3,3 +3,4 @@
 /test/
 /data/denoising.mat
 /.idea/
+**/__pycache__
