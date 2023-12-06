@@ -1,7 +1,6 @@
 import time
 import datetime
 
-import scipy.io as sio
 from torch.utils.tensorboard import SummaryWriter
 
 from models.unet2D import UNet
@@ -22,14 +21,7 @@ def func(args):
     data_type = torch.cuda.FloatTensor
 
     file_name = './data/denoising.mat'
-    mat = sio.loadmat(file_name)
-    image = mat['image']
-    decrease_image = mat['image_noisy']
-
-    image = torch.from_numpy(image).type(data_type)
-    decrease_image = torch.from_numpy(decrease_image).type(data_type)
-    # copy_image = image.clone().detach()
-    # copy_decrease_image = decrease_image.clone().detach()
+    image, decrease_image = read_data(file_name)
     print_images(image, decrease_image, 'origin image')
 
     reg_noise_std = args.reg_noise_std
@@ -47,7 +39,8 @@ def func(args):
                kernel_size_up=3,
                kernel_size_down=3,
                kernel_size_skip=3,
-               upsample_mode=args.upsample_mode,  # downsample_mode='avg',
+               downsample_mode=args.downsample_mode,
+               upsample_mode=args.upsample_mode,
                need1x1_up=False,
                need_sigmoid=False,
                need_bias=True,
@@ -91,6 +84,7 @@ def func(args):
             out_avg = out_avg * exp_weight + out.detach() * (1 - exp_weight)
 
         total_loss = loss_func(out, decrease_image).to(device)  # calculate the loss value of the loss function
+        # print(total_loss)
         total_loss.backward()                                   # back propagation gradient calculation
 
         # print(decrease_image.shape, out.squeeze().shape)
@@ -126,12 +120,10 @@ def func(args):
 
         return total_loss
 
-    params = get_params('net', net, net_input)
-
     print('start iteration...')
     start_time = time.time()
 
-    optimize('adam', params, closure, learning_rate, num_iter)
+    optimize('adam', net.parameters(), closure, learning_rate, num_iter)
 
     writer.close()
     end_time = time.time()

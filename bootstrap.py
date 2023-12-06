@@ -1,6 +1,7 @@
 import argparse
 
 import denoising2D
+import denoising_red
 
 
 def parse_args():
@@ -17,6 +18,7 @@ def parse_args():
     parser.add_argument('--up_channel', dest='up_channel', default=128, type=int)
     parser.add_argument('--down_channel', dest='down_channel', default=128, type=int)
     parser.add_argument('--upsample_mode', dest='upsample_mode', default='bilinear', type=str)
+    parser.add_argument('--downsample_mode', dest='downsample_mode', default='stride', type=str)
 
     return parser.parse_args()
 
@@ -28,7 +30,8 @@ if __name__ == '__main__':
     if args.net == '2d':
         denoising2D.func(args)
         exit()
-    elif args.net == '3d':
+    elif args.net == 'red':
+        denoising_red.func(args)
         exit()
     else:
         assert False

@@ -1,14 +1,38 @@
+import warnings
+from typing import Iterable
+
+import scipy.io as sio
 import torch
 from matplotlib import pyplot as plt
 
 
 def print_images(var_1, var_2, title=None):
+    warnings.warn('该方法已弃用，生成了一个可以打印任意长度图片的方法', DeprecationWarning)
     f, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, sharey=True, figsize=(15, 8))
     # 设置输出图片的标题
     if title is not None:
         f.suptitle(title)
     ax1.imshow(torch.stack((var_1[56, :, :], var_1[26, :, :], var_1[16, :, :]), 2).cpu())
     ax2.imshow(torch.stack((var_2[56, :, :], var_2[26, :, :], var_2[16, :, :]), 2).cpu())
+    plt.show()
+
+
+def print_image(images: list[torch.Tensor], title=None):
+    f, axs = plt.subplots(nrows=1,
+                          ncols=len(images),
+                          sharey=True,
+                          figsize=(5 if len(images) == 1 else 4 * len(images), 5))
+
+    if title is not None:
+        f.suptitle(title)
+
+    if isinstance(axs, Iterable):
+        for index, ax in enumerate(axs):
+            var = images[index]
+            ax.imshow(torch.stack((var[56, :, :], var[26, :, :], var[16, :, :]), 2).cpu())
+    else:
+        var = images[0]
+        axs.imshow(torch.stack((var[56, :, :], var[26, :, :], var[16, :, :]), 2).cpu())
     plt.show()
 
 
@@ -58,6 +82,7 @@ def get_params(opt_over, net, net_input, downsampler=None):
 
 def fill_noise(x, noise_type):
     """Fills tensor `x` with noise of type `noise_type`."""
+    warnings.warn('该方法已弃用', DeprecationWarning)
     if noise_type == 'u':
         x.uniform_()
     elif noise_type == 'n':
@@ -76,6 +101,7 @@ def get_noise(input_depth, method, spatial_size, noise_type='u', var=1. / 10):
         noise_type: 'u' for uniform; 'n' for normal
         var: a factor, a noise will be multiplicand by. Basically it is standard deviation scale.
     """
+    warnings.warn('该方法已弃用，生成了一个更简单的', DeprecationWarning)
     if isinstance(spatial_size, int):
         spatial_size = (spatial_size, spatial_size)
 
@@ -93,6 +119,22 @@ def get_noise(input_depth, method, spatial_size, noise_type='u', var=1. / 10):
     net_input *= var
 
     return net_input
+
+
+def noise_generator(method, shape: list):
+    if method == '2D':
+        shape.insert(0, 1)
+    elif method == '3D':
+        shape.insert(0, 1)
+        shape.insert(0, 1)
+    else:
+        assert False
+
+    noise_tensor = torch.zeros(shape)
+    noise_tensor.uniform_()
+    noise_tensor *= 0.1
+
+    return noise_tensor
 
 
 def optimize(optimizer_type, parameters, closure, learning_rate, num_iter):
@@ -183,3 +225,16 @@ def psnr_gpu(image_true: torch.Tensor, image_test: torch.Tensor):
 
     err = _mean_squared_error(image_true, image_test)
     return (10 * torch.log10((data_range ** 2) / err)).item()
+
+
+def read_data(file_name):
+    data_type = torch.cuda.FloatTensor
+
+    mat = sio.loadmat(file_name)
+    image = mat['image']
+    decrease_image = mat['image_noisy']
+
+    image = torch.from_numpy(image).type(data_type)
+    decrease_image = torch.from_numpy(decrease_image).type(data_type)
+
+    return image, decrease_image
