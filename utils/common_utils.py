@@ -18,6 +18,12 @@ def print_images(var_1, var_2, title=None):
 
 
 def print_image(images: list[torch.Tensor], title=None):
+    """ 输出一组任意长度的(高光谱)图像
+
+    :param images: list of images
+    :param title: title of the image
+    """
+
     f, axs = plt.subplots(nrows=1,
                           ncols=len(images),
                           sharey=True,
