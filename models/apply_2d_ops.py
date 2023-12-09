@@ -153,7 +153,7 @@ def apply_nonlocal_means_2d_mem_efficient(image: torch.Tensor,
     """
     dim = 2
     # include batch and channel dimensions
-    image = unsqueeze_tensor_at_dim(image, dim + 2)
+    image = unsqueeze_tensor_at_dim(image, dim + 2)  # 输入张量维度拓展
     # apply mean filter
     image = apply_mean_filter(image, kernel_size_mean, dim)
     # retrieve neighbourhood

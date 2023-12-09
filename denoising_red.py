@@ -1,10 +1,9 @@
 import datetime
 import time
 
-from torch.autograd import profiler
 from torch.utils.tensorboard import SummaryWriter
 
-from models.non_local_means import fast_non_local_means, non_local_means
+from models.non_local_means import non_local_means
 from models.unet2D import UNet
 from utils.common_utils import *
 from utils.denoising_utils import *

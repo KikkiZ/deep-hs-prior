@@ -9,7 +9,7 @@ print('has cuda: ', has_cuda)
 
 
 def non_local_means(image: torch.Tensor, sigma, fast_mode=True) -> torch.Tensor:
-    if has_cuda and image.is_cuda:
+    if image.is_cuda:
         image = image.cpu()
     image = image.detach_().numpy()
 
@@ -27,7 +27,7 @@ def non_local_means(image: torch.Tensor, sigma, fast_mode=True) -> torch.Tensor:
     return torch.from_numpy(image).cuda() if has_cuda else torch.from_numpy(image)
 
 
-# 比原来的方法快了一倍多
+# 比原来的方法快了一倍多, 但是内存泄露
 def fast_non_local_means(image: torch.Tensor,
                          kernel_size: int = 3,
                          kernel_size_mean=3,
